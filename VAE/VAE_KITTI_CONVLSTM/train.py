@@ -40,6 +40,65 @@ train_loader = torch.utils.data.DataLoader(train_kitti_dataset, batch_size=args.
 test_kitti_dataset= datasets.ImageFolder(root='/home/jyim/hdd2/pytorch_KITTI/test', transform=data_transform)
 test_loader = torch.utils.data.DataLoader(test_kitti_dataset, batch_size=args.test_batch_size, shuffle=None, num_workers=1)
 """Define Networks"""
+### ConvLSTMCell
+class ConvLSTMCell(nn.Module):
+	def __init__(self, input_channels, output_channels, kernel_size):
+		super(ConvLSTMCell, self).__init__()
+
+		assert output_channels % 2 == 0
+
+		self.input_channels = input_channels
+		self.output_channels = output_channels
+		self.kernel_size = kernel_size
+		self.num_features = 4
+
+		self.padding = int((kernel_size - 1) / 2)
+
+		self.Wxi = nn.Conv2d(self.input_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=True)
+		self.Whi = nn.Conv2d(self.output_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=False)
+		self.Wci = None
+
+		self.Wxf = nn.Conv2d(self.input_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=True)
+		self.WhF = nn.Conv2d(self.output_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=False)
+		self.Wcf = None
+
+		self.Wxc = nn.Conv2d(self.input_channels, self.output_channels, self.kernel_size, 1, self.padding, biats=True)
+		self.Whc = nn.Conv2d(self.output_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=False)
+
+		self.Wxo = nn.Conv2d(self.input_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=True)
+		self.Who = nn.Conv2d(self.output_channels, self.output_channels, self.kernel_size, 1, self.padding, bias=False)
+		self.Wco = None
+
+
+	def forward(self, x, h c):
+		### i = input gate / f = forget gate / o = output gate
+		### X = cell input / c = cell output / h = cell state
+		i = torch.sigmoid(self.Wxi(x) + self.Whi(h) + c * self.Wci)
+		f = torch.sigmoid(self.Wxf(x) + self.WhF(h) + c * self.Wcf)
+		c = f*c + i*torch.tanh(self.Wxc(x) + self.Whc(h))
+		o = torch.sigmoid(self.Wco(x) + self.Who(h) + c * self.Wco)
+		h = o * torch.tanh(c)
+		return h, c
+
+	def init_hidden(self, batch_size, output_channels, shape):
+		if self.Wci is None:
+			self.Wci = Variable(torch.zeros(1, output_channels, shape[0], shape[1])).cuda()
+			self.Wcf = Variable(torch.zeros(1, output_channels, shape[0], shape[1])).cuda()
+			self.Wco = Variable(torch.zeros(1, output_channels, shape[0], shape[1])).cuda()
+		else:
+			assert shape[0] == self.Wci.size()[2], 'Input Height Mismatched'
+			assert shape[1] == self.Wci.size()[3], 'Input Width Mismatched'
+
+		return (Variable(torch.zeros(batch_size, hidden, shape[0], shape[1])).cuda(),
+                Variable(torch.zeros(batch_size, hidden, shape[0], shape[1])).cuda())
+
+
+### Variational Auto-Encoder LSTM
+class VAE_ConvLSTM_KITTI(nn.Module):
+	def __init__(self):
+		super (VAE_ConvLSTM_KITTI).__iinit()
+		self.conv1 = ConvLSTMCell
+
 ### Variational Auto-Encoder
 class VAE_KITTI(nn.Module):
 	### Kitti size = [3, 256, 1024] (resized image)
